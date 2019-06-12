@@ -1,0 +1,106 @@
+CSD--TitleBar {
+    background-color: white;
+}
+
+CSD--TitleBar[active="true"] {
+    background-color: black;
+}
+
+CSD--TitleBar QLabel {
+    color: grey;
+}
+
+CSD--TitleBar[active="true"] QLabel {
+    color: white;
+}
+
+CSD--TitleBar QPushButton#push_button_caption_icon {
+    background-color: none;
+    border: none;
+}
+
+CSD--TitleBar QPushButton#push_button_minimize {
+    background-color: none;
+    border: none;
+    color: grey;
+    qproperty-text: "_";
+}
+
+CSD--TitleBar QPushButton#push_button_minimize:hover {
+    background-color: lightgrey;
+}
+
+CSD--TitleBar[active="true"] QPushButton#push_button_minimize {
+    background-color: none;
+    border: none;
+    color: white;
+}
+
+CSD--TitleBar[active="true"] QPushButton#push_button_minimize:hover {
+    background-color: grey;
+}
+
+CSD--TitleBar QPushButton#push_button_maximize_restore {
+    background-color: none;
+    border: none;
+    color: grey;
+    qproperty-text: "☐";
+}
+
+CSD--TitleBar QPushButton#push_button_maximize_restore:hover {
+    background-color: lightgrey;
+}
+
+CSD--TitleBar[active="true"] QPushButton#push_button_maximize_restore {
+    background-color: none;
+    border: none;
+    color: white;
+}
+
+CSD--TitleBar[active="true"] QPushButton#push_button_maximize_restore:hover {
+    background-color: grey;
+}
+
+CSD--TitleBar[title_bar_maximized="true"] QPushButton#push_button_maximize_restore {
+    background-color: none;
+    border: none;
+    color: grey;
+    qproperty-text: "○";
+}
+
+CSD--TitleBar[title_bar_maximized="true"] QPushButton#push_button_maximize_restore:hover {
+    background-color: lightgrey;
+}
+
+CSD--TitleBar[title_bar_maximized="true"][active="true"] QPushButton#push_button_maximize_restore {
+    background-color: none;
+    border: none;
+    color: white;
+}
+
+CSD--TitleBar[title_bar_maximized="true"][active="true"] QPushButton#push_button_maximize_restore:hover {
+    background-color: grey;
+}
+
+CSD--TitleBar QPushButton#push_button_close {
+    background-color: none;
+    border: none;
+    color: grey;
+    qproperty-text: "×";
+}
+
+CSD--TitleBar QPushButton#push_button_close:hover {
+    background-color: red;
+    color: white;
+}
+
+CSD--TitleBar[active="true"] QPushButton#push_button_close {
+    background-color: none;
+    border: none;
+    color: white;
+}
+
+CSD--TitleBar[active="true"] QPushButton#push_button_close:hover {
+    background-color: red;
+    color: white;
+}
