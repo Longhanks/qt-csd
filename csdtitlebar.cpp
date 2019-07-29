@@ -3,7 +3,7 @@
 #include "csdtitlebarbutton.h"
 
 #ifdef _WIN32
-#include "qregistrywatcher.h"
+#include "qtwinbackports.h"
 
 #include <Windows.h>
 #include <dwmapi.h>
@@ -11,49 +11,49 @@
 
 #include <QApplication>
 #include <QBoxLayout>
-#include <QLabel>
+#include <QEvent>
+#include <QMainWindow>
+#include <QMenuBar>
 #include <QPainter>
-#include <QPushButton>
 #include <QStyleOption>
 
-#ifdef _WIN32
-#include <QtWinExtras/QtWin>
+#if !defined(_WIN32) && !defined(__APPLE__)
+#include <QMouseEvent>
+#include <QWindow>
+
+#include <QX11Info>
+
+#include <private/qhighdpiscaling_p.h>
+#include <qpa/qplatformwindow.h>
+
+#include <cstring>
 #endif
 
 namespace CSD {
 
-TitleBar::TitleBar(QWidget *parent) : QWidget(parent) {
+#if !defined(_WIN32) && !defined(__APPLE__)
+constexpr static const char _NET_WM_MOVERESIZE[] = "_NET_WM_MOVERESIZE";
+
+static QWidget *titleBarTopLevelWidget(QWidget *w) {
+    while (w && !w->isWindow() && w->windowType() != Qt::SubWindow) {
+        w = w->parentWidget();
+    }
+    return w;
+}
+#endif
+
+TitleBar::TitleBar(const QIcon &captionIcon, QWidget *parent)
+    : QWidget(parent) {
     this->setObjectName("TitleBar");
     this->setMinimumSize(QSize(0, 30));
     this->setMaximumSize(QSize(QWIDGETSIZE_MAX, 30));
-
-#ifdef _WIN32
-    auto maybeWatcher = QRegistryWatcher::create(
-        HKEY_CURRENT_USER, L"SOFTWARE\\Microsoft\\Windows\\DWM", this);
-    if (maybeWatcher.has_value()) {
-        this->m_watcher = *maybeWatcher;
-        connect(
-            this->m_watcher,
-            &QRegistryWatcher::valueChanged,
-            this,
-            [this]() {
-                auto maybeColor = this->readDWMColorizationColor();
-                if (maybeColor.has_value()) {
-                    this->m_activeColor = *maybeColor;
-                    this->update();
-                }
-            },
-            Qt::QueuedConnection);
-    }
-#endif
-
     this->m_activeColor = [this]() -> QColor {
 #ifdef _WIN32
         auto maybeColor = this->readDWMColorizationColor();
-        return maybeColor.value_or(Qt::black);
+        return maybeColor.value_or(QColor(40, 44, 52));
 #else
         Q_UNUSED(this)
-        return Qt::black;
+        return QColor(40, 44, 52);
 #endif
     }();
 
@@ -80,18 +80,27 @@ TitleBar::TitleBar(QWidget *parent) : QWidget(parent) {
     int icon_size = 16;
 #endif
     this->m_buttonCaptionIcon->setIconSize(QSize(icon_size, icon_size));
-    auto icon = [this]() -> QIcon {
-        auto globalWindowIcon = QApplication::windowIcon();
-#ifdef _WIN32
-        if (globalWindowIcon.isNull()) {
-            this->m_horizontalLayout->takeAt(
-                this->m_horizontalLayout->indexOf(this->m_leftMargin));
-            this->m_leftMargin->setParent(nullptr);
-            HICON winIcon = ::LoadIconW(nullptr, IDI_APPLICATION);
-            globalWindowIcon.addPixmap(QtWin::fromHICON(winIcon));
+    const auto icon = [&captionIcon, this]() -> QIcon {
+        if (!captionIcon.isNull()) {
+            return captionIcon;
         }
+        auto globalWindowIcon = this->window()->windowIcon();
+        if (!globalWindowIcon.isNull()) {
+            return globalWindowIcon;
+        }
+        globalWindowIcon = QApplication::windowIcon();
+        if (!globalWindowIcon.isNull()) {
+            return globalWindowIcon;
+        }
+#ifdef _WIN32
+        // Use system default application icon which doesn't need margin
+        this->m_horizontalLayout->takeAt(
+            this->m_horizontalLayout->indexOf(this->m_leftMargin));
+        this->m_leftMargin->setParent(nullptr);
+        HICON winIcon = ::LoadIconW(nullptr, IDI_APPLICATION);
+        globalWindowIcon.addPixmap(
+            QtWinBackports::qt_pixmapFromWinHICON(winIcon));
 #else
-        Q_UNUSED(this)
 #if !defined(__APPLE__)
         if (globalWindowIcon.isNull()) {
             globalWindowIcon = QIcon::fromTheme("application-x-executable");
@@ -103,22 +112,16 @@ TitleBar::TitleBar(QWidget *parent) : QWidget(parent) {
     this->m_buttonCaptionIcon->setIcon(icon);
     this->m_horizontalLayout->addWidget(this->m_buttonCaptionIcon);
 
-    this->m_marginTitleLeft = new QWidget(this);
-    this->m_marginTitleLeft->setObjectName("MarginTitleLeft");
-    this->m_horizontalLayout->addWidget(this->m_marginTitleLeft);
+    auto *mainWindow = qobject_cast<QMainWindow *>(this->window());
+    if (mainWindow != nullptr) {
+        this->m_menuBar = mainWindow->menuBar();
+        this->m_horizontalLayout->addWidget(this->m_menuBar);
+        this->m_menuBar->setFixedHeight(30);
+    }
 
-    this->m_labelTitle = new QLabel(this);
-    this->m_labelTitle->setObjectName("LabelTitle");
-    this->m_labelTitle->setAlignment(Qt::AlignCenter);
-#ifdef _WIN32
-    this->m_labelTitle->setFont(QFont("Segoe UI", 9));
-#endif
-    this->m_horizontalLayout->addWidget(this->m_labelTitle);
-    this->m_horizontalLayout->setStretchFactor(this->m_labelTitle, 1);
-
-    this->m_marginTitleRight = new QWidget(this);
-    this->m_marginTitleRight->setObjectName("MarginTitleRight");
-    this->m_horizontalLayout->addWidget(this->m_marginTitleRight);
+    auto *emptySpace = new QWidget(this);
+    emptySpace->setAttribute(Qt::WA_TransparentForMouseEvents);
+    this->m_horizontalLayout->addWidget(emptySpace, 1);
 
     this->m_buttonMinimize =
         new TitleBarButton(TitleBarButton::Minimize, this);
@@ -126,10 +129,10 @@ TitleBar::TitleBar(QWidget *parent) : QWidget(parent) {
     this->m_buttonMinimize->setMinimumSize(QSize(46, 30));
     this->m_buttonMinimize->setMaximumSize(QSize(46, 30));
     this->m_buttonMinimize->setFocusPolicy(Qt::NoFocus);
-    this->m_buttonMinimize->setText("―");
+    this->m_buttonMinimize->setIconSize(QSize(10, 10));
     this->m_horizontalLayout->addWidget(this->m_buttonMinimize);
-    connect(this->m_buttonMinimize, &TitleBarButton::clicked, this, [this]() {
-        emit this->minimize_clicked();
+    connect(this->m_buttonMinimize, &QPushButton::clicked, this, [this]() {
+        emit this->minimizeClicked();
     });
 
     this->m_buttonMaximizeRestore =
@@ -138,22 +141,22 @@ TitleBar::TitleBar(QWidget *parent) : QWidget(parent) {
     this->m_buttonMaximizeRestore->setMinimumSize(QSize(46, 30));
     this->m_buttonMaximizeRestore->setMaximumSize(QSize(46, 30));
     this->m_buttonMaximizeRestore->setFocusPolicy(Qt::NoFocus);
-    this->m_buttonMaximizeRestore->setText("☐");
+    this->m_buttonMaximizeRestore->setIconSize(QSize(10, 10));
     this->m_horizontalLayout->addWidget(this->m_buttonMaximizeRestore);
     connect(this->m_buttonMaximizeRestore,
-            &TitleBarButton::clicked,
+            &QPushButton::clicked,
             this,
-            [this]() { emit this->maxmize_restore_clicked(); });
+            [this]() { emit this->maximizeRestoreClicked(); });
 
     this->m_buttonClose = new TitleBarButton(TitleBarButton::Close, this);
     this->m_buttonClose->setObjectName("ButtonClose");
     this->m_buttonClose->setMinimumSize(QSize(46, 30));
     this->m_buttonClose->setMaximumSize(QSize(46, 30));
     this->m_buttonClose->setFocusPolicy(Qt::NoFocus);
-    this->m_buttonClose->setText("✕");
+    this->m_buttonClose->setIconSize(QSize(10, 10));
     this->m_horizontalLayout->addWidget(this->m_buttonClose);
-    connect(this->m_buttonClose, &TitleBarButton::clicked, this, [this]() {
-        emit this->close_clicked();
+    connect(this->m_buttonClose, &QPushButton::clicked, this, [this]() {
+        emit this->closeClicked();
     });
 
     this->setAutoFillBackground(true);
@@ -188,27 +191,82 @@ std::optional<QColor> TitleBar::readDWMColorizationColor() {
 }
 #endif
 
-void TitleBar::updateSpacers() {
-    int width_left =
-        this->m_leftMargin->width() + this->m_buttonCaptionIcon->width();
-    int width_right = this->m_buttonClose->width();
-    if (this->m_buttonMinimize->isVisible()) {
-        width_right += this->m_buttonMinimize->width();
+TitleBar::~TitleBar() {
+    auto *mainWindow = qobject_cast<QMainWindow *>(this->window());
+    if (mainWindow != nullptr) {
+        mainWindow->setMenuBar(this->m_menuBar);
     }
-    if (this->m_buttonMaximizeRestore->isVisible()) {
-        width_right += this->m_buttonMaximizeRestore->width();
-    }
-    if (width_left > width_right) {
-        this->m_marginTitleRight->setFixedSize(
-            width_left - width_right, this->m_marginTitleRight->height());
-    } else {
-        this->m_marginTitleLeft->setFixedSize(
-            width_right - width_left, this->m_marginTitleLeft->height());
-    }
+    this->m_menuBar = nullptr;
 }
 
+#if !defined(_WIN32) && !defined(__APPLE__)
+void TitleBar::mousePressEvent(QMouseEvent *event) {
+    if (!QX11Info::isPlatformX11() || event->button() != Qt::LeftButton) {
+        QWidget::mousePressEvent(event);
+        return;
+    }
+
+    QWidget *tlw = titleBarTopLevelWidget(this);
+
+    if (tlw->isWindow() && tlw->windowHandle() &&
+        !(tlw->windowFlags() & Qt::X11BypassWindowManagerHint) &&
+        !tlw->testAttribute(Qt::WA_DontShowOnScreen) &&
+        !tlw->hasHeightForWidth()) {
+        QPlatformWindow *platformWindow = tlw->windowHandle()->handle();
+        const QPoint globalPos = QHighDpi::toNativePixels(
+            platformWindow->mapToGlobal(this->mapTo(tlw, event->pos())),
+            platformWindow->screen());
+
+        const xcb_atom_t moveResizeAtom = []() -> xcb_atom_t {
+            xcb_intern_atom_cookie_t cookie = xcb_intern_atom(
+                QX11Info::connection(),
+                false,
+                static_cast<std::uint16_t>(std::strlen(_NET_WM_MOVERESIZE)),
+                _NET_WM_MOVERESIZE);
+            xcb_intern_atom_reply_t *reply =
+                xcb_intern_atom_reply(QX11Info::connection(), cookie, nullptr);
+            const xcb_atom_t moveResizeAtomCopy = reply->atom;
+            free(reply);
+            return moveResizeAtomCopy;
+        }();
+
+        xcb_client_message_event_t xev;
+        xev.response_type = XCB_CLIENT_MESSAGE;
+        xev.type = moveResizeAtom;
+        xev.sequence = 0;
+        xev.window = static_cast<xcb_window_t>(platformWindow->winId());
+        xev.format = 32;
+        xev.data.data32[0] = static_cast<std::uint32_t>(globalPos.x());
+        xev.data.data32[1] = static_cast<std::uint32_t>(globalPos.y());
+        xev.data.data32[2] = 8; // move
+        xev.data.data32[3] = XCB_BUTTON_INDEX_1;
+        xev.data.data32[4] = 0;
+
+        const xcb_window_t rootWindow = [platformWindow]() -> xcb_window_t {
+            xcb_query_tree_cookie_t queryTreeCookie = xcb_query_tree(
+                QX11Info::connection(),
+                static_cast<xcb_window_t>(platformWindow->winId()));
+            xcb_query_tree_reply_t *queryTreeReply = xcb_query_tree_reply(
+                QX11Info::connection(), queryTreeCookie, nullptr);
+            xcb_window_t rootWindowCopy = queryTreeReply->root;
+            free(queryTreeReply);
+            return rootWindowCopy;
+        }();
+
+        std::uint32_t eventFlags = XCB_EVENT_MASK_SUBSTRUCTURE_REDIRECT |
+                                   XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY;
+
+        xcb_ungrab_pointer(QX11Info::connection(), XCB_CURRENT_TIME);
+        xcb_send_event(QX11Info::connection(),
+                       false,
+                       rootWindow,
+                       eventFlags,
+                       reinterpret_cast<const char *>(&xev));
+    }
+}
+#endif
+
 void TitleBar::paintEvent([[maybe_unused]] QPaintEvent *event) {
-    this->updateSpacers();
     auto styleOption = QStyleOption();
     styleOption.init(this);
     auto painter = QPainter(this);
@@ -227,27 +285,33 @@ void TitleBar::setActive(bool active) {
         palette.setColor(QPalette::Background, this->m_activeColor);
         this->setPalette(palette);
 
-        auto labelPalette = this->m_labelTitle->palette();
-        labelPalette.setColor(QPalette::Foreground, Qt::white);
-        this->m_labelTitle->setPalette(labelPalette);
-
-        this->m_buttonCaptionIcon->setActive(true);
-        this->m_buttonMinimize->setActive(true);
-        this->m_buttonMaximizeRestore->setActive(true);
-        this->m_buttonClose->setActive(true);
+        this->m_buttonMinimize->setIcon(
+            QIcon(":/resources/chrome-minimize-dark.svg"));
+        if (this->m_maximized) {
+            this->m_buttonMaximizeRestore->setIcon(
+                QIcon(":/resources/chrome-restore-dark.svg"));
+        } else {
+            this->m_buttonMaximizeRestore->setIcon(
+                QIcon(":/resources/chrome-maximize-dark.svg"));
+        }
+        this->m_buttonClose->setIcon(
+            QIcon(":/resources/chrome-close-dark.svg"));
     } else {
         auto palette = this->palette();
-        palette.setColor(QPalette::Background, Qt::white);
+        palette.setColor(QPalette::Background, QColor(33, 37, 43));
         this->setPalette(palette);
 
-        auto labelPalette = this->m_labelTitle->palette();
-        labelPalette.setColor(QPalette::Foreground, Qt::gray);
-        this->m_labelTitle->setPalette(labelPalette);
-
-        this->m_buttonCaptionIcon->setActive(false);
-        this->m_buttonMinimize->setActive(false);
-        this->m_buttonMaximizeRestore->setActive(false);
-        this->m_buttonClose->setActive(false);
+        this->m_buttonMinimize->setIcon(
+            QIcon(":/resources/chrome-minimize-dark-disabled.svg"));
+        if (this->m_maximized) {
+            this->m_buttonMaximizeRestore->setIcon(
+                QIcon(":/resources/chrome-restore-dark-disabled.svg"));
+        } else {
+            this->m_buttonMaximizeRestore->setIcon(
+                QIcon(":/resources/chrome-maximize-dark-disabled.svg"));
+        }
+        this->m_buttonClose->setIcon(
+            QIcon(":/resources/chrome-close-dark-disabled.svg"));
     }
 }
 
@@ -257,20 +321,58 @@ bool TitleBar::isMaximized() const {
 
 void TitleBar::setMaximized(bool maximized) {
     this->m_maximized = maximized;
+    if (this->m_active) {
+        this->m_buttonMinimize->setIcon(
+            QIcon(":/resources/chrome-minimize-dark.svg"));
+        if (this->m_maximized) {
+            this->m_buttonMaximizeRestore->setIcon(
+                QIcon(":/resources/chrome-restore-dark.svg"));
+        } else {
+            this->m_buttonMaximizeRestore->setIcon(
+                QIcon(":/resources/chrome-maximize-dark.svg"));
+        }
+        this->m_buttonClose->setIcon(
+            QIcon(":/resources/chrome-close-dark.svg"));
+    } else {
+        this->m_buttonMinimize->setIcon(
+            QIcon(":/resources/chrome-minimize-dark-disabled.svg"));
+        if (this->m_maximized) {
+            this->m_buttonMaximizeRestore->setIcon(
+                QIcon(":/resources/chrome-restore-dark-disabled.svg"));
+        } else {
+            this->m_buttonMaximizeRestore->setIcon(
+                QIcon(":/resources/chrome-maximize-dark-disabled.svg"));
+        }
+        this->m_buttonClose->setIcon(
+            QIcon(":/resources/chrome-close-dark-disabled.svg"));
+    }
 }
 
 void TitleBar::setMinimizable(bool on) {
     this->m_buttonMinimize->setVisible(on);
-    this->updateSpacers();
 }
 
 void TitleBar::setMaximizable(bool on) {
     this->m_buttonMaximizeRestore->setVisible(on);
-    this->updateSpacers();
 }
 
-void TitleBar::setTitle(const QString &title) {
-    this->m_labelTitle->setText(title);
+QColor TitleBar::activeColor() {
+    return this->m_activeColor;
+}
+
+void TitleBar::setActiveColor(const QColor &activeColor) {
+    this->m_activeColor = activeColor;
+    this->update();
+}
+
+QColor TitleBar::hoverColor() const {
+    return this->m_hoverColor;
+}
+
+void TitleBar::setHoverColor(QColor hoverColor) {
+    this->m_hoverColor = std::move(hoverColor);
+    this->m_buttonMinimize->setHoverColor(this->m_hoverColor);
+    this->m_buttonMaximizeRestore->setHoverColor(this->m_hoverColor);
 }
 
 void TitleBar::onWindowStateChange(Qt::WindowStates state) {
@@ -284,17 +386,19 @@ bool TitleBar::hovered() const {
     if (!hovered) {
         return false;
     }
-    bool captionIconHovered = this->m_buttonCaptionIcon->rect().contains(
-        this->m_buttonCaptionIcon->mapFromGlobal(cursorPos));
-    bool minimizeHovered = this->m_buttonMinimize->rect().contains(
-        this->m_buttonMinimize->mapFromGlobal(cursorPos));
-    bool maximizeRestoreHovered =
-        this->m_buttonMaximizeRestore->rect().contains(
-            this->m_buttonMaximizeRestore->mapFromGlobal(cursorPos));
-    bool closeHovered = this->m_buttonClose->rect().contains(
-        this->m_buttonClose->mapFromGlobal(cursorPos));
-    return !(captionIconHovered || minimizeHovered || maximizeRestoreHovered ||
-             closeHovered);
+
+    if (this->m_menuBar->rect().contains(
+            this->m_menuBar->mapFromGlobal(cursorPos))) {
+        return false;
+    }
+
+    for (const TitleBarButton *btn : this->findChildren<TitleBarButton *>()) {
+        bool btnHovered = btn->rect().contains(btn->mapFromGlobal(cursorPos));
+        if (btnHovered) {
+            return false;
+        }
+    }
+    return true;
 }
 
 } // namespace CSD

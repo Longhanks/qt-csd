@@ -1,0 +1,13 @@
+<RCC>
+    <qresource prefix="/">
+        <file>resources/chrome-close-dark.svg</file>
+        <file>resources/chrome-maximize-dark.svg</file>
+        <file>resources/chrome-minimize-dark.svg</file>
+        <file>resources/chrome-restore-dark.svg</file>
+        <file>resources/chrome-close-dark-disabled.svg</file>
+        <file>resources/chrome-maximize-dark-disabled.svg</file>
+        <file>resources/chrome-minimize-dark-disabled.svg</file>
+        <file>resources/chrome-restore-dark-disabled.svg</file>
+        <file>resources/chrome-close-light.svg</file>
+    </qresource>
+</RCC>

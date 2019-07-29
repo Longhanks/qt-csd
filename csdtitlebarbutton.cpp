@@ -2,13 +2,10 @@
 
 #include "csdtitlebar.h"
 
-#include <QStyle>
+#include <QEvent>
+#include <QPropertyAnimation>
 #include <QStyleOption>
 #include <QStylePainter>
-#include <Qt>
-#include <qdrawutil.h>
-
-#include <QDebug>
 
 namespace CSD {
 
@@ -24,40 +21,47 @@ TitleBarButton::TitleBarButton(const QIcon &icon,
                                const QString &text,
                                Role role,
                                TitleBar *parent)
-    : QWidget(parent), m_role(role), m_text(text), m_icon(icon) {
+    : QPushButton(icon, text, parent), m_role(role) {
     this->setAttribute(Qt::WidgetAttribute::WA_Hover, true);
 }
 
-QString TitleBarButton::text() const {
-    return this->m_text;
+double TitleBarButton::fader() const {
+    return this->m_fader;
 }
 
-void TitleBarButton::setText(const QString &text) {
-    this->m_text = text;
+void TitleBarButton::setFader(double value) {
+    this->m_fader = value;
+    this->update();
 }
 
-QIcon TitleBarButton::icon() const {
-    return this->m_icon;
+QColor TitleBarButton::hoverColor() const {
+    return this->m_hoverColor;
 }
 
-void TitleBarButton::setIcon(const QIcon &icon) {
-    this->m_icon = icon;
+void TitleBarButton::setHoverColor(QColor hoverColor) {
+    this->m_hoverColor = std::move(hoverColor);
 }
 
-bool TitleBarButton::isActive() const {
-    return this->m_active;
-}
-
-void TitleBarButton::setActive(bool active) {
-    this->m_active = active;
-}
-
-QSize TitleBarButton::iconSize() const {
-    return this->m_iconSize;
-}
-
-void TitleBarButton::setIconSize(const QSize &size) {
-    this->m_iconSize = size;
+bool TitleBarButton::event(QEvent *event) {
+    switch (event->type()) {
+    case QEvent::Enter: {
+        auto animation = new QPropertyAnimation(this, "fader");
+        animation->setDuration(125);
+        animation->setEndValue(1.0);
+        animation->start(QAbstractAnimation::DeleteWhenStopped);
+        break;
+    }
+    case QEvent::Leave: {
+        auto animation = new QPropertyAnimation(this, "fader");
+        animation->setDuration(125);
+        animation->setEndValue(0.0);
+        animation->start(QAbstractAnimation::DeleteWhenStopped);
+        break;
+    }
+    default:
+        break;
+    }
+    return QPushButton::event(event);
 }
 
 void TitleBarButton::paintEvent([[maybe_unused]] QPaintEvent *event) {
@@ -65,39 +69,57 @@ void TitleBarButton::paintEvent([[maybe_unused]] QPaintEvent *event) {
     auto styleOptionButton = QStyleOptionButton();
     styleOptionButton.initFrom(this);
     styleOptionButton.features = QStyleOptionButton::None;
-    styleOptionButton.text = this->m_text;
-    styleOptionButton.icon = this->m_icon;
-    styleOptionButton.iconSize = this->m_iconSize;
-    if (this->m_active) {
-        styleOptionButton.palette.setColor(QPalette::ButtonText, Qt::white);
-    } else {
-        styleOptionButton.palette.setColor(QPalette::ButtonText, Qt::gray);
+    styleOptionButton.text = this->text();
+    styleOptionButton.icon = this->icon();
+    styleOptionButton.iconSize = this->iconSize();
+
+    const auto hoverColor = [this]() -> QColor {
+        auto col = this->m_role == Role::Close ? QColor(232, 17, 35, 229)
+                                               : this->m_hoverColor;
+        col.setAlpha(static_cast<int>(this->m_fader * col.alpha()));
+        if (this->m_role == Role::CaptionIcon) {
+            col.setAlpha(0);
+        }
+        return col;
+    }();
+    const bool isHovered = styleOptionButton.state & QStyle::State_MouseOver;
+
+    switch (this->m_role) {
+    case Role::CaptionIcon: {
+        break;
+    }
+    case Role::Minimize: {
+        if (isHovered) {
+            styleOptionButton.icon =
+                QIcon(":/resources/chrome-minimize-dark.svg");
+        }
+        break;
+    }
+    case Role::MaximizeRestore: {
+        if (isHovered) {
+            if (this->window()->windowState() & Qt::WindowMaximized) {
+                styleOptionButton.icon =
+                    QIcon(":/resources/chrome-restore-dark.svg");
+            } else {
+                styleOptionButton.icon =
+                    QIcon(":/resources/chrome-maximize-dark.svg");
+            }
+        }
+        break;
+    }
+    case Role::Close: {
+        if (isHovered) {
+            styleOptionButton.icon =
+                QIcon(":/resources/chrome-close-light.svg");
+        }
+        break;
+    }
     }
 
-    bool hovered = styleOptionButton.state & QStyle::State_MouseOver;
-    if (hovered && !(this->m_role == Role::CaptionIcon)) {
-        QBrush brush = styleOptionButton.palette.brush(QPalette::Button);
-        if (this->m_role == Role::Close) {
-            brush.setColor(Qt::red);
-            if (!this->m_active) {
-                styleOptionButton.palette.setColor(QPalette::ButtonText,
-                                                   Qt::white);
-            }
-        } else if (this->isActive()) {
-            QColor brushColor = Qt::lightGray;
-            brushColor.setAlpha(50);
-            brush.setColor(brushColor);
-        } else {
-            styleOptionButton.palette.setColor(QPalette::ButtonText,
-                                               Qt::black);
-        }
-        qDrawShadePanel(&stylePainter,
-                        styleOptionButton.rect,
-                        styleOptionButton.palette,
-                        false,
-                        0,
-                        &brush);
-    }
+    stylePainter.setRenderHint(QPainter::Antialiasing, false);
+    stylePainter.setPen(Qt::NoPen);
+    stylePainter.setBrush(QBrush(hoverColor));
+    stylePainter.drawRect(styleOptionButton.rect);
     stylePainter.drawControl(QStyle::CE_PushButtonLabel, styleOptionButton);
 }
 

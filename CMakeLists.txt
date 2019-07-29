@@ -27,14 +27,15 @@ set(CMAKE_CXX_STANDARD 17)
 cmake_policy(SET CMP0020 NEW)
 cmake_policy(SET CMP0071 NEW)
 
-find_package(Threads REQUIRED)
 find_package(Qt5 COMPONENTS Widgets REQUIRED)
 
 project(qt-csd LANGUAGES CXX VERSION 0.1.0)
 
-add_executable(qt-csd WIN32 csdmainwindow.cpp csdtitlebarbutton.cpp csdtitlebar.cpp main.cpp)
+add_executable(${PROJECT_NAME} WIN32 csd.qrc csdapplicationfilter.cpp csdtitlebar.cpp csdtitlebarbutton.cpp main.cpp mainwindow.cpp)
 if (WIN32)
-    target_sources(qt-csd PRIVATE qregistrywatcher.cpp)
+    target_sources(${PROJECT_NAME} PRIVATE qregistrywatcher.cpp qtwinbackports.cpp win32csd.cpp)
+else ()
+    target_sources(${PROJECT_NAME} PRIVATE linuxcsd.cpp)
 endif ()
 
 if ("${CMAKE_CXX_COMPILER_ID}" MATCHES "(Apple)?[Cc]lang" AND NOT MSVC)
@@ -66,7 +67,6 @@ elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
         "-Wnull-dereference"
         "-Wold-style-cast"
         "-Woverloaded-virtual"
-        "-Woverloaded-virtual"
         "-Wpedantic"
         "-Wpointer-arith"
         "-Wredundant-decls"
@@ -93,37 +93,41 @@ else ()
 endif ()
 string(REPLACE ";" " " COMPILER_WARNINGS_STR "${COMPILER_WARNINGS}")
 
-get_target_property(qt-csd_SOURCES qt-csd SOURCES)
+get_target_property(${PROJECT_NAME}_SOURCES ${PROJECT_NAME} SOURCES)
 
-foreach (qt-csd_SOURCE ${qt-csd_SOURCES})
-    set_source_files_properties(${qt-csd_SOURCE} PROPERTIES COMPILE_FLAGS "${COMPILER_WARNINGS_STR}")
+foreach (${PROJECT_NAME}_SOURCE ${${PROJECT_NAME}_SOURCES})
+    set_source_files_properties(${${PROJECT_NAME}_SOURCE} PROPERTIES COMPILE_FLAGS "${COMPILER_WARNINGS_STR}")
 endforeach ()
 
-set_target_properties(qt-csd PROPERTIES AUTOMOC ON)
+set_target_properties(${PROJECT_NAME} PROPERTIES AUTOMOC ON AUTORCC ON)
 
-target_include_directories(qt-csd SYSTEM PRIVATE ${Qt5Gui_PRIVATE_INCLUDE_DIRS})
+target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE
+    "${Qt5Gui_PRIVATE_INCLUDE_DIRS}"
+    "${CMAKE_CURRENT_BINARY_DIR}"
+    "${Qt5Widgets_INCLUDE_DIRS}"
+)
 
-target_link_libraries(qt-csd PRIVATE
+target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt5::Widgets
 )
 
-if (APPLE)
-    find_library(LIBOBJC "objc")
-    target_link_libraries(qt-csd PRIVATE
-        ${LIBOBJC}
-    )
-endif ()
-
 if (WIN32)
-    find_package(Qt5WinExtras REQUIRED)
-
-    target_compile_definitions(qt-csd PUBLIC WIN32_LEAN_AND_MEAN)
-    target_compile_definitions(qt-csd PUBLIC NOMINMAX)
-    target_compile_definitions(qt-csd PUBLIC UNICODE)
+    target_compile_definitions(${PROJECT_NAME} PUBLIC WIN32_LEAN_AND_MEAN)
+    target_compile_definitions(${PROJECT_NAME} PUBLIC NOMINMAX)
+    target_compile_definitions(${PROJECT_NAME} PUBLIC UNICODE)
 
     find_library(DWMAPI "dwmapi")
-    target_link_libraries(qt-csd PRIVATE
+    target_link_libraries(${PROJECT_NAME} PRIVATE
         ${DWMAPI}
-        Qt5::WinExtras
+    )
+else ()
+    find_package(Qt5X11Extras REQUIRED)
+
+    target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE
+        ${Qt5X11Extras_INCLUDE_DIRS}
+    )
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        Qt5::X11Extras
+        "-lxcb"
     )
 endif ()
