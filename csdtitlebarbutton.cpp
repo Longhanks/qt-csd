@@ -2,13 +2,10 @@
 
 #include "csdtitlebar.h"
 
-#include <QStyle>
+#include <QEvent>
+#include <QPropertyAnimation>
 #include <QStyleOption>
 #include <QStylePainter>
-#include <Qt>
-#include <qdrawutil.h>
-
-#include <QDebug>
 
 namespace CSD {
 
@@ -24,81 +21,147 @@ TitleBarButton::TitleBarButton(const QIcon &icon,
                                const QString &text,
                                Role role,
                                TitleBar *parent)
-    : QWidget(parent), m_role(role), m_text(text), m_icon(icon) {
+    : QPushButton(icon, text, parent), m_role(role) {
     this->setAttribute(Qt::WidgetAttribute::WA_Hover, true);
 }
 
-QString TitleBarButton::text() const {
-    return this->m_text;
+double TitleBarButton::fader() const {
+    return this->m_fader;
 }
 
-void TitleBarButton::setText(const QString &text) {
-    this->m_text = text;
+void TitleBarButton::setFader(double value) {
+    this->m_fader = value;
+    this->update();
 }
 
-QIcon TitleBarButton::icon() const {
-    return this->m_icon;
+QColor TitleBarButton::hoverColor() const {
+    return this->m_hoverColor;
 }
 
-void TitleBarButton::setIcon(const QIcon &icon) {
-    this->m_icon = icon;
+void TitleBarButton::setHoverColor(QColor hoverColor) {
+    this->m_hoverColor = std::move(hoverColor);
 }
 
-bool TitleBarButton::isActive() const {
-    return this->m_active;
+bool TitleBarButton::keepDown() const {
+    return this->m_keepDown;
 }
 
-void TitleBarButton::setActive(bool active) {
-    this->m_active = active;
+void TitleBarButton::setKeepDown(bool keepDown) {
+    this->m_keepDown = keepDown;
+    this->update();
 }
 
-QSize TitleBarButton::iconSize() const {
-    return this->m_iconSize;
-}
-
-void TitleBarButton::setIconSize(const QSize &size) {
-    this->m_iconSize = size;
+bool TitleBarButton::event(QEvent *event) {
+    if (this->isDown()) {
+        return QPushButton::event(event);
+    }
+    switch (event->type()) {
+    case QEvent::Enter: {
+        auto animation = new QPropertyAnimation(this, "fader");
+        animation->setDuration(125);
+        animation->setEndValue(1.0);
+        animation->start(QAbstractAnimation::DeleteWhenStopped);
+        break;
+    }
+    case QEvent::Leave: {
+        auto animation = new QPropertyAnimation(this, "fader");
+        animation->setDuration(125);
+        animation->setEndValue(0.0);
+        animation->start(QAbstractAnimation::DeleteWhenStopped);
+        break;
+    }
+    default:
+        break;
+    }
+    return QPushButton::event(event);
 }
 
 void TitleBarButton::paintEvent([[maybe_unused]] QPaintEvent *event) {
+    auto *titleBar = static_cast<TitleBar *>(this->parent());
+
     auto stylePainter = QStylePainter(this);
     auto styleOptionButton = QStyleOptionButton();
     styleOptionButton.initFrom(this);
     styleOptionButton.features = QStyleOptionButton::None;
-    styleOptionButton.text = this->m_text;
-    styleOptionButton.icon = this->m_icon;
-    styleOptionButton.iconSize = this->m_iconSize;
-    if (this->m_active) {
-        styleOptionButton.palette.setColor(QPalette::ButtonText, Qt::white);
-    } else {
-        styleOptionButton.palette.setColor(QPalette::ButtonText, Qt::gray);
+    styleOptionButton.text = this->text();
+    styleOptionButton.icon = this->icon();
+    styleOptionButton.iconSize = this->iconSize();
+
+    const auto hoverColor = [titleBar, this]() -> QColor {
+        auto col = this->m_role == Role::Close ? QColor(232, 17, 35, 229)
+                                               : this->m_hoverColor;
+        if (!this->m_keepDown) {
+            col.setAlpha(static_cast<int>(this->m_fader * col.alpha()));
+        }
+
+        bool isMacCaptionStyle =
+            titleBar->captionButtonStyle() == CaptionButtonStyle::mac;
+        bool isMacCaptionButton =
+            (isMacCaptionStyle && this->m_role == Role::Minimize) ||
+            (isMacCaptionStyle && this->m_role == Role::MaximizeRestore) ||
+            (isMacCaptionStyle && this->m_role == Role::Close);
+
+        if (!this->isEnabled() || this->m_role == Role::CaptionIcon ||
+            isMacCaptionButton) {
+            col.setAlpha(0);
+        }
+
+        return col;
+    }();
+
+    // On mac style, all caption buttons get the 'hovered' style if any of them
+    // is hovered - this mimics real macOS
+    const bool isHovered =
+        (styleOptionButton.state & QStyle::State_MouseOver) ||
+        (titleBar->captionButtonStyle() == CaptionButtonStyle::mac &&
+         titleBar->isCaptionButtonHovered());
+
+    const auto iconPaths =
+        Internal::captionIconPathsForState(titleBar->isActive(),
+                                           titleBar->isMaximized(),
+                                           isHovered,
+                                           this->isDown(),
+                                           titleBar->captionButtonStyle());
+
+    switch (this->m_role) {
+    case Role::CaptionIcon: {
+        break;
+    }
+    case Role::Minimize: {
+        if (isHovered) {
+            styleOptionButton.icon = QIcon(iconPaths[0].toString());
+        }
+        break;
+    }
+    case Role::MaximizeRestore: {
+        if (isHovered) {
+            styleOptionButton.icon = QIcon(iconPaths[1].toString());
+        }
+        break;
+    }
+    case Role::Close: {
+        if (isHovered) {
+            styleOptionButton.icon = QIcon(iconPaths[2].toString());
+        }
+        break;
+    }
     }
 
-    bool hovered = styleOptionButton.state & QStyle::State_MouseOver;
-    if (hovered && !(this->m_role == Role::CaptionIcon)) {
-        QBrush brush = styleOptionButton.palette.brush(QPalette::Button);
-        if (this->m_role == Role::Close) {
-            brush.setColor(Qt::red);
-            if (!this->m_active) {
-                styleOptionButton.palette.setColor(QPalette::ButtonText,
-                                                   Qt::white);
-            }
-        } else if (this->isActive()) {
-            QColor brushColor = Qt::lightGray;
-            brushColor.setAlpha(50);
-            brush.setColor(brushColor);
-        } else {
-            styleOptionButton.palette.setColor(QPalette::ButtonText,
-                                               Qt::black);
-        }
-        qDrawShadePanel(&stylePainter,
-                        styleOptionButton.rect,
-                        styleOptionButton.palette,
-                        false,
-                        0,
-                        &brush);
-    }
+    stylePainter.setRenderHint(QPainter::Antialiasing, false);
+    stylePainter.setPen(Qt::NoPen);
+    stylePainter.setBrush(QBrush(hoverColor));
+    stylePainter.drawRect(styleOptionButton.rect);
     stylePainter.drawControl(QStyle::CE_PushButtonLabel, styleOptionButton);
+}
+
+void TitleBarButton::enterEvent(QEvent *event) {
+    QPushButton::enterEvent(event);
+    static_cast<TitleBar *>(this->parent())->triggerCaptionRepaint();
+}
+
+void TitleBarButton::leaveEvent(QEvent *event) {
+    QPushButton::leaveEvent(event);
+    static_cast<TitleBar *>(this->parent())->triggerCaptionRepaint();
 }
 
 } // namespace CSD

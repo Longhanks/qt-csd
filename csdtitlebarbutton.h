@@ -1,14 +1,15 @@
 #pragma once
 
-#include <QIcon>
-#include <QWidget>
+#include <QPushButton>
 
 namespace CSD {
 
 class TitleBar;
 
-class TitleBarButton : public QWidget {
+class TitleBarButton : public QPushButton {
     Q_OBJECT
+    Q_PROPERTY(double fader READ fader WRITE setFader)
+    Q_PROPERTY(bool keepDown READ keepDown WRITE setKeepDown)
 
 public:
     enum Role { CaptionIcon, Minimize, MaximizeRestore, Close };
@@ -23,30 +24,24 @@ public:
                             Role role,
                             TitleBar *parent = nullptr);
 
-    [[nodiscard]] QString text() const;
-    void setText(const QString &text);
-
-    [[nodiscard]] QIcon icon() const;
-    void setIcon(const QIcon &icon);
-
-    [[nodiscard]] bool isActive() const;
-    void setActive(bool active);
-
-    [[nodiscard]] QSize iconSize() const;
-    void setIconSize(const QSize &size);
-
-signals:
-    void clicked();
+    double fader() const;
+    void setFader(double value);
+    QColor hoverColor() const;
+    void setHoverColor(QColor hoverColor);
+    bool keepDown() const;
+    void setKeepDown(bool keepDown);
 
 protected:
+    bool event(QEvent *event) override;
     void paintEvent(QPaintEvent *event) override;
+    void enterEvent(QEvent *event) override;
+    void leaveEvent(QEvent *event) override;
 
 private:
     Role m_role;
-    QString m_text;
-    QIcon m_icon;
-    bool m_active = false;
-    QSize m_iconSize;
+    double m_fader = 0.0;
+    QColor m_hoverColor = Qt::gray;
+    bool m_keepDown = false;
 };
 
 } // namespace CSD

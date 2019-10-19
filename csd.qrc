@@ -1,0 +1,46 @@
+<RCC>
+    <qresource prefix="/">
+        <file>resources/titlebar/win/chrome-close-dark.svg</file>
+        <file>resources/titlebar/win/chrome-close-dark-disabled.svg</file>
+        <file>resources/titlebar/win/chrome-close-light.svg</file>
+        <file>resources/titlebar/win/chrome-maximize-dark.svg</file>
+        <file>resources/titlebar/win/chrome-maximize-dark-disabled.svg</file>
+        <file>resources/titlebar/win/chrome-minimize-dark.svg</file>
+        <file>resources/titlebar/win/chrome-minimize-dark-disabled.svg</file>
+        <file>resources/titlebar/win/chrome-restore-dark.svg</file>
+        <file>resources/titlebar/win/chrome-restore-dark-disabled.svg</file>
+        <file>resources/titlebar/mac/close.png</file>
+        <file>resources/titlebar/mac/close@2x.png</file>
+        <file>resources/titlebar/mac/close-hovered.png</file>
+        <file>resources/titlebar/mac/close-hovered@2x.png</file>
+        <file>resources/titlebar/mac/close-pressed.png</file>
+        <file>resources/titlebar/mac/close-pressed@2x.png</file>
+        <file>resources/titlebar/mac/inactive.png</file>
+        <file>resources/titlebar/mac/inactive@2x.png</file>
+        <file>resources/titlebar/mac/maximize-restore.png</file>
+        <file>resources/titlebar/mac/maximize-restore@2x.png</file>
+        <file>resources/titlebar/mac/maximize-restore-maximized-hovered.png</file>
+        <file>resources/titlebar/mac/maximize-restore-maximized-hovered@2x.png</file>
+        <file>resources/titlebar/mac/maximize-restore-maximized-pressed.png</file>
+        <file>resources/titlebar/mac/maximize-restore-maximized-pressed@2x.png</file>
+        <file>resources/titlebar/mac/maximize-restore-normal-hovered.png</file>
+        <file>resources/titlebar/mac/maximize-restore-normal-hovered@2x.png</file>
+        <file>resources/titlebar/mac/maximize-restore-normal-pressed.png</file>
+        <file>resources/titlebar/mac/maximize-restore-normal-pressed@2x.png</file>
+        <file>resources/titlebar/mac/minimize.png</file>
+        <file>resources/titlebar/mac/minimize@2x.png</file>
+        <file>resources/titlebar/mac/minimize-hovered.png</file>
+        <file>resources/titlebar/mac/minimize-hovered@2x.png</file>
+        <file>resources/titlebar/mac/minimize-pressed.png</file>
+        <file>resources/titlebar/mac/minimize-pressed@2x.png</file>
+        <file>resources/titlebar/custom/chrome-close-dark.svg</file>
+        <file>resources/titlebar/custom/chrome-close-dark-disabled.svg</file>
+        <file>resources/titlebar/custom/chrome-close-light.svg</file>
+        <file>resources/titlebar/custom/chrome-maximize-dark.svg</file>
+        <file>resources/titlebar/custom/chrome-maximize-dark-disabled.svg</file>
+        <file>resources/titlebar/custom/chrome-minimize-dark.svg</file>
+        <file>resources/titlebar/custom/chrome-minimize-dark-disabled.svg</file>
+        <file>resources/titlebar/custom/chrome-restore-dark.svg</file>
+        <file>resources/titlebar/custom/chrome-restore-dark-disabled.svg</file>
+    </qresource>
+</RCC>
