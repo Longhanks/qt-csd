@@ -26,6 +26,7 @@ Win32ClientSideDecorationFilter::~Win32ClientSideDecorationFilter() = default;
 
 bool Win32ClientSideDecorationFilter::eventFilter(QObject *watched,
                                                   QEvent *event) {
+    QWidget *widget = static_cast<QWidget *>(watched);
     auto resultIterator =
         std::find_if(std::begin(this->appliedHWNDs),
                      std::end(this->appliedHWNDs),
@@ -35,9 +36,37 @@ bool Win32ClientSideDecorationFilter::eventFilter(QObject *watched,
 
     if (event->type() == QEvent::ActivationChange) {
         resultIterator->second.onActivationChanged();
+        return false;
     } else if (event->type() == QEvent::WindowStateChange) {
         resultIterator->second.onWindowStateChanged();
+        return false;
     }
+
+    QWindow *window = widget->windowHandle();
+    if (window == nullptr) {
+        return false;
+    }
+
+    auto rect = ::RECT{0, 0, 0, 0};
+    DWORD style = WS_POPUP | WS_CLIPSIBLINGS | WS_CLIPCHILDREN |
+                  WS_THICKFRAME | WS_DLGFRAME;
+    ::AdjustWindowRectEx(&rect, style, FALSE, 0);
+
+    const auto systemCaptionMargin = ::GetSystemMetrics(SM_CYCAPTION);
+    const auto marginBottom = std::abs(rect.bottom) + systemCaptionMargin;
+    const auto margins = QMargins(-8, -marginBottom, -8, -8);
+    const auto variantMargins = qVariantFromValue(margins);
+    window->setProperty("_q_windowsCustomMargins", variantMargins);
+
+    QPlatformWindow *platformWindow = window->handle();
+    if (platformWindow == nullptr) {
+        return false;
+    }
+
+    QGuiApplication::platformNativeInterface()->setWindowProperty(
+        platformWindow,
+        QStringLiteral("WindowsCustomMargins"),
+        variantMargins);
 
     return false;
 }
